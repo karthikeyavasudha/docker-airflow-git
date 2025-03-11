@@ -20,6 +20,14 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+      
+      - name: Debugging
+        run: |
+          echo "EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}"
+          echo "EC2_HOST: ${{ secrets.EC2_HOST }}"
       
       - name: Deploy DAGs to EC2
         run: |
