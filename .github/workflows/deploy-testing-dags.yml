@@ -9,25 +9,34 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
         with:
           ref: testing
-          
+
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts || true
-        shell: bash
-        
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts || true
+
+          # Debugging: Check if SSH key is properly created
+          echo "Checking SSH key files..."
+          ls -lah ~/.ssh
+          echo "First 5 lines of id_rsa:"
+          head -n 5 ~/.ssh/id_rsa || echo "Failed to read id_rsa"
+
+      - name: Test SSH Connection
+        run: |
+          ssh -o StrictHostKeyChecking=no -v ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "echo 'SSH Connection Successful'"
+
       - name: Deploy DAGs to EC2
         run: |
           rsync -avz --delete ./dags/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:${{ secrets.DOCKER_COMPOSE_PATH }}/dags/
-        shell: bash
-        
-      - name: Restart Airflow (if needed)
+
+      - name: Restart Airflow Scheduler
         run: |
-          ssh ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "cd ${{ secrets.DOCKER_COMPOSE_PATH }} && docker-compose restart airflow-docker-airflow-scheduler-1"
-        shell: bash
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "cd ${{ secrets.DOCKER_COMPOSE_PATH }} && docker-compose restart airflow-docker-airflow-scheduler-1"
