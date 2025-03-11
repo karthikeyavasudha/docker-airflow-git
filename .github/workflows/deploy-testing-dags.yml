@@ -16,7 +16,7 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          sudo chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
       - name: Deploy DAGs to EC2
         run: |
@@ -30,5 +30,5 @@ jobs:
               cd airflow-dags
             fi
             cp -r dags/* /home/ec2-user/airflow-docker/dags/
-            docker restart airflow_scheduler airflow_webserver
+            sudo docker restart airflow-docker-airflow-scheduler-1
           EOF
