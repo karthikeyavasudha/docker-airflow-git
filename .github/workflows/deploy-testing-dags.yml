@@ -1,42 +1,39 @@
-name: Deploy Testing Airflow DAGs
+name: Deploy Airflow DAGs
 
 on:
   push:
-    branches: [ testing ]
-    paths:
-      - 'dags/**'
+    branches:
+      - testing  # Trigger on pushes to the "testing" branch
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          ref: testing
+          ref: testing  # Ensures the correct branch is checked out
 
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts || true
-
-          # Debugging: Check if SSH key is properly created
-          echo "Checking SSH key files..."
-          ls -lah ~/.ssh
-          echo "First 5 lines of id_rsa:"
-          head -n 5 ~/.ssh/id_rsa || echo "Failed to read id_rsa"
-
-      - name: Test SSH Connection
-        run: |
-          ssh -o StrictHostKeyChecking=no -v ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "echo 'SSH Connection Successful'"
+          ssh-keyscan -H 35.172.216.36 >> ~/.ssh/known_hosts
 
       - name: Deploy DAGs to EC2
         run: |
-          rsync -avz --delete ./dags/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:${{ secrets.DOCKER_COMPOSE_PATH }}/dags/
-
-      - name: Restart Airflow Scheduler
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "cd ${{ secrets.DOCKER_COMPOSE_PATH }} && docker-compose restart airflow-docker-airflow-scheduler-1"
+          ssh -i ~/.ssh/id_rsa ec2-user@35.172.216.36 << 'EOF'
+            set -e
+            cd /home/ec2-user
+            if [ -d "airflow-dags" ]; then
+              cd airflow-dags && git pull origin testing
+            else
+              git clone -b testing git@github.com:yourusername/yourrepo.git airflow-dags
+              cd airflow-dags
+            fi
+            cp -r dags/* /home/ec2-user/airflow-docker/dags/
+            docker restart airflow_scheduler airflow_webserver
+          EOF
