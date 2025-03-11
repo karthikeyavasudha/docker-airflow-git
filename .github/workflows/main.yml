@@ -1,0 +1,55 @@
+name: Deploy Airflow DAGs to Amazon Linux EC2
+
+on:
+  push:
+    branches:
+      - testing-flow
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy DAGs to EC2
+        run: |
+          ssh ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+            # Variables
+            GIT_REPO="https://github.com/karthikeyavasudha/docker-airflow-git.git"
+            CLONE_DIR="/home/ec2-user/airflow-docker"
+            DAGS_DIR="/home/ec2-user/airflow-docker/dags"
+            BRANCH="testing-flow"
+
+            # Ensure Git is installed
+            sudo yum install git -y
+
+            # Clone or update DAGs repo
+            if [ -d "$CLONE_DIR/.git" ]; then
+              echo "Updating DAGs repository..."
+              cd "$CLONE_DIR" || exit 1
+              git fetch origin "$BRANCH"
+              git reset --hard origin/"$BRANCH"
+            else
+              echo "Cloning DAGs repository..."
+              git clone --branch "$BRANCH" "$GIT_REPO" "$CLONE_DIR"
+            fi
+
+            # Copy DAGs to Airflow DAGs folder
+            echo "Copying DAG files..."
+            cp -r "$CLONE_DIR/dags/"* "$DAGS_DIR"
+
+            # Restart Airflow (Docker)
+            echo "Restarting Airflow..."
+            docker restart airflow-docker-airflow-scheduler-1
+
+            echo "DAGs update completed."
+          EOF
